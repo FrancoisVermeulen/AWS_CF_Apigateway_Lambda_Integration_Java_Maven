@@ -9,8 +9,232 @@ Parameters:
     Type: String
   CODEKEY:
     Type: String
+  VPCID:
+    Type: String
+  SECURITYGROUPDID:
+    Type: String
+  SUBNETID:
+    Type: String
+  REGION:
+    Type: String
+  APIGATEWAYNAME:
+    Type: String
+  BASEPATH:
+    Type: String
 
 Resources:
+
+  VPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Join [".", ["com.amazonaws", !Ref REGION, "execute-api"]]
+      VpcId: !Ref VPCID
+      PrivateDnsEnabled: true
+      SecurityGroupIds:
+        - !Ref SECURITYGROUPDID
+      SubnetIds:
+        - !Ref SUBNETID
+      VpcEndpointType: Interface
+
+  ApiGateway:
+    DependsOn:
+      - VPCEndpoint
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      EndpointConfiguration:
+        Types:
+          - PRIVATE
+        VpcEndpointIds:
+          - Ref: VPCEndpoint
+      Name: !Ref APIGATEWAYNAME
+      Policy:
+        Statement:
+          - Action: execute-api:Invoke
+            Effect: Allow
+            Principal: "*"
+            Resource:
+              Fn::Join:
+                - ""
+                - - "arn:aws:execute-api:"
+                  - Ref: AWS::Region
+                  - ":"
+                  - Ref: AWS::AccountId
+                  - :*
+          - Action: execute-api:Invoke
+            Condition:
+              StringNotEquals:
+                aws:SourceVpc:
+                  Ref: VPCID
+            Effect: Deny
+            Principal: "*"
+            Resource:
+              Fn::Join:
+                - ""
+                - - "arn:aws:execute-api:"
+                  - Ref: AWS::Region
+                  - ":"
+                  - Ref: AWS::AccountId
+                  - :*
+        Version: "2012-10-17"
+    
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId:
+        Ref: ApiGateway
+      Description: Automatically created by the RestApi construct
+    DependsOn:
+      - ApiGatewayOPTIONS
+      - baseResourceOPTIONS
+      - baseResource
+      - mock
+    Metadata:
+      aws:cdk:path: Ics-cdk-ProductModel-ApiGateway/ApiGateway/Deployment/Resource
+  ApiGatewayDeploymentStageprod1C6D5CD6:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId:
+        Ref: ApiGateway
+      DeploymentId:
+        Ref: ApiGatewayDeployment
+      StageName: prod
+    Metadata:
+      aws:cdk:path: Ics-cdk-ProductModel-ApiGateway/ApiGateway/DeploymentStage.prod/Resource
+  ApiGatewayOPTIONS:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: OPTIONS
+      ResourceId:
+        Fn::GetAtt:
+          - ApiGateway
+          - RootResourceId
+      RestApiId:
+        Ref: ApiGateway
+      AuthorizationType: NONE
+      Integration:
+        IntegrationResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,x-apigw-api-id'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT'"
+            StatusCode: "200"
+        RequestTemplates:
+          application/json: "{ statusCode: 200 }"
+        Type: MOCK
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Methods: true
+          StatusCode: "200"
+    Metadata:
+      aws:cdk:path: Ics-cdk-ProductModel-ApiGateway/ApiGateway/Default/OPTIONS/Resource
+  baseResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId:
+        Fn::GetAtt:
+          - ApiGateway
+          - RootResourceId
+      PathPart: !Ref BASEPATH
+      RestApiId:
+        Ref: ApiGateway
+    Metadata:
+      aws:cdk:path: Ics-cdk-ProductModel-ApiGateway/baseResource/Resource
+  baseResourceOPTIONS:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: OPTIONS
+      ResourceId:
+        Ref: baseResource
+      RestApiId:
+        Ref: ApiGateway
+      AuthorizationType: NONE
+      Integration:
+        IntegrationResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,x-apigw-api-id'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT'"
+            StatusCode: "200"
+        RequestTemplates:
+          application/json: "{ statusCode: 200 }"
+        Type: MOCK
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: true
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Methods: true
+          StatusCode: "200"
+    Metadata:
+      aws:cdk:path: Ics-cdk-ProductModel-ApiGateway/baseResource/OPTIONS/Resource
+  mock:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: GET
+      ResourceId:
+        Ref: baseResource
+      RestApiId:
+        Ref: ApiGateway
+      AuthorizationType: NONE
+      Integration:
+        IntegrationResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,api_key,X-Api-Key,x-apigw-api-id'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            StatusCode: "200"
+        PassthroughBehavior: WHEN_NO_TEMPLATES
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+        Type: MOCK
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Origin: false
+          StatusCode: "200"
+
+  lambdaResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId:
+        Fn::GetAtt:
+          - ApiGateway
+          - RootResourceId
+      PathPart: 'lambda'
+      RestApiId:
+        Ref: ApiGateway
+
+  Method:
+    DependsOn:
+      - Function
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref lambdaResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: POST
+        Uri: !Sub >-
+          arn:aws:apigateway:${REGION}:lambda:path/2015-03-31/functions/${Function.Arn}/invocations
+        IntegrationResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Methods: "'GET,OPTIONS'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,api_key,X-Api-Key,x-apigw-api-id'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            StatusCode: "200"
+        PassthroughBehavior: WHEN_NO_TEMPLATES
+        RequestTemplates:
+          application/json: '{"statusCode": 200}'
+      MethodResponses:
+        - ResponseParameters:
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Origin: false
+          StatusCode: "200"
 
   Layer:
     Type: AWS::Lambda::LayerVersion
@@ -48,4 +272,15 @@ Resources:
       Code:
         S3Bucket: !Ref CODEBUCKET
         S3Key: !Ref CODEKEY
+
+  ApiGatewayInvokeLambdaFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt Function.Arn
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !Sub >-
+        arn:aws:execute-api:${REGION}:${AWS::AccountId}:${ApiGateway}/*/GET/*
+
 

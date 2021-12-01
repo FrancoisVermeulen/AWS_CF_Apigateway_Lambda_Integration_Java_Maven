@@ -3,3 +3,4 @@
 /target/*
 /java/lib/*
 /.idea/*
+/scripts/mybuild.sh
